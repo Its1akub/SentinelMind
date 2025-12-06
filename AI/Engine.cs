@@ -1,12 +1,29 @@
+using System.Diagnostics;
 using SentinelMind.Models;
 
 namespace SentinelMind.AI;
 
 public class Engine
 {
+    public Stopwatch Timer = new Stopwatch();
+    private long _nodes = 0;
+    
+    public float RunningTime { get; set; } = 0f;
+    public bool Verbose { get; set; } = false;
+    public int LastEval { get; private set; } = 0;
+    public double TimeLimit { get; set; } = 0;
+    public long Nodes
+    {
+        get => _nodes;
+        private set => _nodes = value;
+    }
     
     public Move FindBestMove(Board board, PieceColor color, int depth)
     {
+        Nodes = 0;
+        LastEval = 0;
+        Timer = Stopwatch.StartNew();
+        
         var moves = board.GenerateLegalMoves(color);
         if (!moves.Any())
             return default;
@@ -16,14 +33,29 @@ public class Engine
 
         var locker = new object();
         
+        
+        
         Parallel.ForEach(moves, move =>
         {
+            if (TimeLimit > 0 && Timer.ElapsedMilliseconds >= TimeLimit)
+            {
+                Timer.Stop();
+                return;
+            }
+            
             var copy = board.Copy();
             try
             {
                 copy.MakeMove(move);
 
                 int score = Minimax(copy, depth - 1, int.MinValue, int.MaxValue, color == PieceColor.Black);
+                if (TimeLimit > 0 && Timer.ElapsedMilliseconds >= TimeLimit)
+                {
+                    Timer.Stop();
+                    return;
+                }
+                
+                
                 lock (locker)
                 {
                     if (color == PieceColor.White)
@@ -49,6 +81,11 @@ public class Engine
                 // ignored
             }
         });
+        if (Timer.IsRunning)
+        {
+            RunningTime = Timer.ElapsedMilliseconds/1000f;
+            Timer.Stop();
+        }
         return bestMove;
     }
 
@@ -86,15 +123,29 @@ public class Engine
     
     public int Minimax(Board board, int depth, int alpha, int beta, bool maximizingPlayer)
     {
+        Interlocked.Increment(ref _nodes);
+
         if (depth == 0)
-            return Evaluate(board);
+        {
+            int eval = Evaluate(board);
+            if (Verbose)
+                Console.WriteLine($"{new string('_', depth*2)}Eval at depth 0: {eval}");
+            LastEval = eval;      
+            return eval;
+        }
 
         var moves = board.GenerateLegalMoves(
             maximizingPlayer ? PieceColor.White : PieceColor.Black
         );
 
         if (!moves.Any())
-            return Evaluate(board);
+        {
+            int eval = Evaluate(board);
+            if (Verbose)
+                Console.WriteLine($"{new string('_', depth*2)}No moves, eval: {eval}");
+            LastEval = eval;
+            return eval;
+        }
 
         if (maximizingPlayer)
         {
@@ -107,11 +158,16 @@ public class Engine
                 {
                     copy.MakeMove(move);
 
+                    if (Verbose)
+                        Console.WriteLine($"{new string('_', depth*2)}Max: Trying move {move}");
+                    
                     int eval = Minimax(copy, depth - 1, alpha, beta, false);
                     maxEval = Math.Max(maxEval, eval);
                     alpha = Math.Max(alpha, eval);
 
                     if (alpha >= beta)
+                        if (Verbose)
+                            Console.WriteLine($"{new string('_', depth*2)}Pruning remaining moves at depth {depth}");
                         break;
                 }
                 catch (Exception)
@@ -134,11 +190,16 @@ public class Engine
                 {
                     copy.MakeMove(move);
 
+                    if (Verbose)
+                        Console.WriteLine($"{new string('_', depth*2)}Min: Trying move {move}");
+                    
                     int eval = Minimax(copy, depth - 1, alpha, beta, true);
                     minEval = Math.Min(minEval, eval);
                     beta = Math.Min(beta, eval);
 
                     if (alpha >= beta)
+                        if (Verbose)
+                            Console.WriteLine($"{new string('_', depth*2)}Pruning remaining moves at depth {depth}");
                         break;
                 }
                 catch (Exception)

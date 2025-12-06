@@ -10,6 +10,7 @@ public class Board
     public bool BlackCanCastleKingSide;
     public bool BlackCanCastleQueenSide;
     public (int r, int c)? EnPassantTarget;
+    public bool WhiteToMove;
 
     public Board()
     {
@@ -51,6 +52,9 @@ public class Board
         var parts = fen.Split(' ');
         
         string piecePlacement = parts[0];
+        
+        WhiteToMove = parts[1] == "w";
+        
         var rows = piecePlacement.Split('/');
 
         for (int row = 0; row < 8; row++)
@@ -92,6 +96,59 @@ public class Board
             EnPassantTarget = null;
         }
     }
+
+    public string GetFEN()
+    {
+        string piecePlacement = "";
+        for (int row = 0; row < 8; row++)
+        {
+            int emptyCount = 0;
+            for (int col = 0; col < 8; col++)
+            {
+                var piece = _board[7 - row, col].Piece;
+                if (piece == null)
+                {
+                    emptyCount++;
+                }
+                else
+                {
+                    if (emptyCount > 0)
+                    {
+                        piecePlacement += emptyCount;
+                        emptyCount = 0;
+                    }
+                    piecePlacement += PieceToChar(piece);
+                   
+                }
+            }
+            if (emptyCount > 0)
+                piecePlacement += emptyCount;
+            if (row < 7)
+                piecePlacement += '/';
+        }
+
+       
+        string activeColor = WhiteToMove ? "w" : "b";
+        
+        string castling = "";
+        if (WhiteCanCastleKingSide) castling += "K";
+        if (WhiteCanCastleQueenSide) castling += "Q";
+        if (BlackCanCastleKingSide) castling += "k";
+        if (BlackCanCastleQueenSide) castling += "q";
+        if (castling == "") castling = "-";
+        
+        string ep = "-";
+        if (EnPassantTarget.HasValue)
+        {
+            var (r, c) = EnPassantTarget.Value;
+            ep = $"{(char)('a' + c)}{8 - r}";
+        }
+        
+        int halfMoveClock = 0; 
+        int fullMoveNumber = 1; 
+
+        return $"{piecePlacement} {activeColor} {castling} {ep} {halfMoveClock} {fullMoveNumber}";
+    }
     
     private Piece CharToPiece(char c)
     {
@@ -110,6 +167,31 @@ public class Board
         };
 
         return new Piece(type, color);
+    }
+    
+    private char PieceToChar(Piece piece)
+    {
+        return piece.Color == PieceColor.White
+            ? piece.Type switch
+            {
+                PieceType.Pawn => 'P',
+                PieceType.Rook => 'R',
+                PieceType.Knight => 'N',
+                PieceType.Bishop => 'B',
+                PieceType.Queen => 'Q',
+                PieceType.King => 'K',
+                _ => '?'
+            }
+            : piece.Type switch
+            {
+                PieceType.Pawn => 'p',
+                PieceType.Rook => 'r',
+                PieceType.Knight => 'n',
+                PieceType.Bishop => 'b',
+                PieceType.Queen => 'q',
+                PieceType.King => 'k',
+                _ => '?'
+            };
     }
 
     
